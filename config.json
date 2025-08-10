@@ -1,0 +1,27 @@
+{
+  "llm": {
+    "provider": "mock",
+    "model": "gpt-4o-mini",
+    "temperature": 0.2
+  },
+  "environment": {
+    "size_x": 20,
+    "size_y": 20,
+    "size_z": 5,
+    "num_targets": 6,
+    "rng_seed": 7
+  },
+  "swarm": {
+    "num_drones": 5
+  },
+  "visualization": {
+    "frames": 2000,
+    "interval_ms": 100,
+    "max_scanned_points": 3000,
+    "render_scanned": true,
+    "render_targets": true
+  },
+  "agent": {
+    "memory_limit": 10
+  }
+} 

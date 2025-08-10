@@ -1,0 +1,4 @@
+numpy>=1.26
+matplotlib>=3.8
+openai>=1.40.0
+pydantic>=2.7 
