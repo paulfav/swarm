@@ -26,7 +26,6 @@ python main.py
 ```
 export LLM_PROVIDER=openai
 export OPENAI_API_KEY=your_key
-my_key: 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
 python main.py
 ```
 
