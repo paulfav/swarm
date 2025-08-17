@@ -33,6 +33,21 @@ def create_swarm_from_config():
     return cfg, env, swarm, agents
 
 
+def create_swarm_from_config_with_logger(logger):
+    cfg = load_config()
+    env = Environment(
+        size_x=cfg.environment.size_x,
+        size_y=cfg.environment.size_y,
+        size_z=cfg.environment.size_z,
+        num_targets=cfg.environment.num_targets,
+        rng_seed=cfg.environment.rng_seed,
+    )
+    drone_ids = [f"D{i}" for i in range(cfg.swarm.num_drones)]
+    swarm = Swarm(env=env, drone_ids=drone_ids)
+    agents = [DroneAgent(drone_id=d, env=env, swarm=swarm, memory_limit=cfg.agent.memory_limit, logger=logger) for d in drone_ids]
+    return cfg, env, swarm, agents
+
+
 class Visualization:
     def __init__(self, env: Environment, swarm: Swarm, agents: List[DroneAgent], max_scanned_points: int = 3000, render_scanned: bool = True, render_targets: bool = True):
         self.env = env
@@ -46,7 +61,7 @@ class Visualization:
         self.ax.set_xlim(0, env.size_x)
         self.ax.set_ylim(0, env.size_y)
         self.ax.set_zlim(0, env.size_z)
-        self.ax.set_title("LLM-Driven Drone Swarm Search & Rescue")
+        self.ax.set_title("Individual LLM-Driven Drone Swarm Search & Rescue")
 
         # precompute target locations
         self.target_positions = np.array([t.position for t in env.targets.values()])
@@ -62,7 +77,7 @@ class Visualization:
         self.ax.set_xlabel("X")
         self.ax.set_ylabel("Y")
         self.ax.set_zlabel("Z")
-        self.ax.set_title("LLM-Driven Drone Swarm Search & Rescue")
+        self.ax.set_title("Individual LLM-Driven Drone Swarm Search & Rescue")
 
         # draw scanned voxels as faint points for performance
         if self.render_scanned:
@@ -128,7 +143,16 @@ class Visualization:
         telemetry = self.swarm.telemetry()
         coverage_pct = telemetry["coverage"] * 100.0
         remaining = len(telemetry["remaining_targets"])
-        self.ax.set_title(f"Coverage: {coverage_pct:.1f}% | Remaining targets: {remaining}")
+        
+        # Show planning info
+        planning_info = []
+        for agent in self.agents:
+            if agent.action_plan and agent.plan_step < len(agent.action_plan):
+                planning_info.append(f"{agent.drone_id}:{agent.plan_step}/10")
+            else:
+                planning_info.append(f"{agent.drone_id}:no-plan")
+        
+        self.ax.set_title(f"Individual LLM Control | Coverage: {coverage_pct:.1f}% | Remaining: {remaining} | Plans: {', '.join(planning_info)}")
 
         # occasional GC to curb fragmentation in long runs
         if (frame_idx % 50) == 0:
@@ -143,6 +167,8 @@ def main():
     run_logger = RunLogger()
     for agent in agents:
         run_logger.register_agent(agent.drone_id)
+        run_logger.register_llm_log(agent.drone_id)
+        agent.logger = run_logger
 
     viz = Visualization(
         env,

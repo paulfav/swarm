@@ -1,6 +1,6 @@
 {
   "llm": {
-    "provider": "mock",
+    "provider": "openai",
     "model": "gpt-4o-mini",
     "temperature": 0.2
   },
@@ -15,8 +15,8 @@
     "num_drones": 5
   },
   "visualization": {
-    "frames": 2000,
-    "interval_ms": 100,
+    "frames": 200,
+    "interval_ms": 1000,
     "max_scanned_points": 3000,
     "render_scanned": true,
     "render_targets": true
