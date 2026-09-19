@@ -102,7 +102,24 @@ export function getDeal(id: string): Deal | undefined {
 
 export async function getDealAsync(id: string): Promise<Deal | undefined> {
   await ensureSeeded();
-  return store().get(id);
+  const deal = store().get(id);
+  if (!deal) return undefined;
+  return ensureThreadModule(deal);
+}
+
+function ensureThreadModule(deal: Deal): Deal {
+  if (deal.blueprint.modules.some((m) => m.type === "supplier_thread")) {
+    return deal;
+  }
+  const mods = [...deal.blueprint.modules];
+  const idx = mods.findIndex((m) => m.type === "actions");
+  mods.splice(idx >= 0 ? idx : mods.length, 0, {
+    type: "supplier_thread",
+    title: "Supplier thread",
+  });
+  const next = { ...deal, blueprint: { ...deal.blueprint, modules: mods } };
+  store().set(deal.id, next);
+  return next;
 }
 
 export function saveDeal(deal: Deal): Deal {
