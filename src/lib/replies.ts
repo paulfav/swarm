@@ -3,6 +3,7 @@ import {
   scoreEmailForDeal,
   type InboundEmail,
 } from "./channels/email-inbox";
+import { greenApiPollIncoming } from "./channels/green-api";
 import {
   applyParsedQuoteToDealQuote,
   parseSupplierReply,
@@ -123,24 +124,7 @@ export async function pollAndIngestReplies(deal: Deal): Promise<{
   error?: string;
 }> {
   const inbox = await pollAgentInbox({ sinceMinutes: 60 * 24 * 14, limit: 30 });
-  if (!inbox.configured) {
-    return {
-      deal,
-      matched: 0,
-      inboxConfigured: false,
-      error:
-        inbox.error ||
-        "No inbox configured. Set CHINA_ACCESS_MAILTM_* or CHINA_ACCESS_IMAP_*.",
-    };
-  }
-  if (inbox.error) {
-    return {
-      deal,
-      matched: 0,
-      inboxConfigured: true,
-      error: inbox.error,
-    };
-  }
+  const waInbox = await greenApiPollIncoming(20);
 
   const existingIds = new Set(
     (deal.thread || [])
@@ -150,33 +134,82 @@ export async function pollAndIngestReplies(deal: Deal): Promise<{
 
   let updated = deal;
   let matched = 0;
-  const ranked = inbox.emails
-    .map((e) => ({ email: e, score: scoreEmailForDeal(e, deal) }))
-    .filter((x) => x.score >= 15)
-    .sort((a, b) => b.score - a.score);
+  const errors: string[] = [];
 
-  for (const { email } of ranked) {
-    if (email.messageId && existingIds.has(email.messageId)) continue;
-    // Skip our own outbound echoes roughly
-    if (/china access agent/i.test(email.text) && /please reply with/i.test(email.text)) {
-      continue;
+  if (inbox.configured) {
+    if (inbox.error) errors.push(inbox.error);
+    const ranked = inbox.emails
+      .map((e) => ({ email: e, score: scoreEmailForDeal(e, deal) }))
+      .filter((x) => x.score >= 15)
+      .sort((a, b) => b.score - a.score);
+
+    for (const { email } of ranked) {
+      if (email.messageId && existingIds.has(email.messageId)) continue;
+      if (
+        /china access agent/i.test(email.text) &&
+        /please reply with/i.test(email.text)
+      ) {
+        continue;
+      }
+      updated = ingestSupplierReply(updated, {
+        text: `Subject: ${email.subject}\n\n${email.text}`,
+        channel: "email",
+        from: email.from,
+        subject: email.subject,
+        receivedAt: email.receivedAt,
+      });
+      const last = updated.thread?.[updated.thread.length - 1];
+      if (last && email.messageId) {
+        last.meta = { ...last.meta, messageId: email.messageId };
+      }
+      matched += 1;
+      if (email.messageId) existingIds.add(email.messageId);
     }
-    updated = ingestSupplierReply(updated, {
-      text: `Subject: ${email.subject}\n\n${email.text}`,
-      channel: "email",
-      from: email.from,
-      subject: email.subject,
-      receivedAt: email.receivedAt,
-    });
-    const last = updated.thread?.[updated.thread.length - 1];
-    if (last && email.messageId) {
-      last.meta = { ...last.meta, messageId: email.messageId };
-    }
-    matched += 1;
-    if (email.messageId) existingIds.add(email.messageId);
   }
 
-  return { deal: updated, matched, inboxConfigured: true };
+  if (waInbox.configured) {
+    if (waInbox.error) errors.push(waInbox.error);
+    const dealWa = deal.contacts?.whatsapp?.replace(/[^\d]/g, "") || "";
+    for (const msg of waInbox.messages) {
+      if (msg.idMessage && existingIds.has(msg.idMessage)) continue;
+      const matchesDeal =
+        !dealWa ||
+        dealWa === msg.fromDigits ||
+        msg.fromDigits.endsWith(dealWa) ||
+        dealWa.endsWith(msg.fromDigits);
+      if (!matchesDeal) continue;
+      updated = ingestSupplierReply(updated, {
+        text: msg.text,
+        channel: "whatsapp",
+        from: msg.fromDigits,
+        receivedAt: msg.receivedAt,
+      });
+      const last = updated.thread?.[updated.thread.length - 1];
+      if (last && msg.idMessage) {
+        last.meta = { ...last.meta, messageId: msg.idMessage };
+      }
+      matched += 1;
+      if (msg.idMessage) existingIds.add(msg.idMessage);
+    }
+  }
+
+  const inboxConfigured = inbox.configured || waInbox.configured;
+  if (!inboxConfigured) {
+    return {
+      deal,
+      matched: 0,
+      inboxConfigured: false,
+      error:
+        "No inbox configured. Set CHINA_ACCESS_MAILTM_* or GREEN_API_*.",
+    };
+  }
+
+  return {
+    deal: updated,
+    matched,
+    inboxConfigured: true,
+    error: errors.length ? errors.join("; ") : undefined,
+  };
 }
 
 export function ingestWebhookEmail(

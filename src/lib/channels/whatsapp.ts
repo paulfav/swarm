@@ -1,3 +1,9 @@
+import {
+  getGreenApiConfig,
+  greenApiGetState,
+  greenApiSendMessage,
+} from "./green-api";
+
 export interface WhatsAppSendInput {
   to: string; // digits
   body: string;
@@ -8,7 +14,7 @@ export interface WhatsAppSendResult {
   channel: "whatsapp";
   to: string;
   body: string;
-  provider: "twilio" | "deep_link" | "none";
+  provider: "green-api" | "twilio" | "deep_link" | "none";
   messageSid?: string;
   deepLink?: string;
   error?: string;
@@ -20,41 +26,35 @@ function e164(to: string): string {
   return d.startsWith("+") ? d : `+${d}`;
 }
 
-/**
- * Send WhatsApp via Twilio if configured; otherwise return a wa.me deep link
- * the agent/ops can open. Never fakes a successful Twilio send.
- */
-export async function sendWhatsApp(
-  input: WhatsAppSendInput,
+async function sendViaTwilio(
+  to: string,
+  body: string,
+  deepLink: string,
+  sentAt: string,
 ): Promise<WhatsAppSendResult> {
-  const sentAt = new Date().toISOString();
-  const to = input.to.replace(/[^\d]/g, "");
-  const deepLink = `https://wa.me/${to}?text=${encodeURIComponent(input.body)}`;
-
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_WHATSAPP_FROM; // e.g. whatsapp:+14155238886
-
+  const from = process.env.TWILIO_WHATSAPP_FROM;
   if (!sid || !token || !from) {
     return {
       ok: false,
       channel: "whatsapp",
       to,
-      body: input.body,
+      body,
       provider: "deep_link",
       deepLink,
       error:
-        "Twilio WhatsApp not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_WHATSAPP_FROM). Deep link prepared for agent.",
+        "No WhatsApp sender ready (Green-API unauthorized or Twilio missing). Deep link prepared.",
       sentAt,
     };
   }
 
   try {
     const auth = Buffer.from(`${sid}:${token}`).toString("base64");
-    const body = new URLSearchParams({
+    const form = new URLSearchParams({
       From: from.startsWith("whatsapp:") ? from : `whatsapp:${from}`,
       To: `whatsapp:${e164(to)}`,
-      Body: input.body,
+      Body: body,
     });
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
@@ -64,7 +64,7 @@ export async function sendWhatsApp(
           Authorization: `Basic ${auth}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body,
+        body: form,
       },
     );
     const data = (await res.json()) as { sid?: string; message?: string };
@@ -73,7 +73,7 @@ export async function sendWhatsApp(
         ok: false,
         channel: "whatsapp",
         to,
-        body: input.body,
+        body,
         provider: "twilio",
         deepLink,
         error: data.message || `Twilio HTTP ${res.status}`,
@@ -84,7 +84,7 @@ export async function sendWhatsApp(
       ok: true,
       channel: "whatsapp",
       to,
-      body: input.body,
+      body,
       provider: "twilio",
       messageSid: data.sid,
       deepLink,
@@ -95,11 +95,58 @@ export async function sendWhatsApp(
       ok: false,
       channel: "whatsapp",
       to,
-      body: input.body,
+      body,
       provider: "twilio",
       deepLink,
       error: e instanceof Error ? e.message : "WhatsApp send failed",
       sentAt,
     };
   }
+}
+
+/**
+ * Send WhatsApp via self-provisioned Green-API (preferred), Twilio, or wa.me deep link.
+ */
+export async function sendWhatsApp(
+  input: WhatsAppSendInput,
+): Promise<WhatsAppSendResult> {
+  const sentAt = new Date().toISOString();
+  const to = input.to.replace(/[^\d]/g, "");
+  const deepLink = `https://wa.me/${to}?text=${encodeURIComponent(input.body)}`;
+
+  const green = getGreenApiConfig();
+  if (green) {
+    const state = await greenApiGetState();
+    if (state.stateInstance === "authorized") {
+      const sent = await greenApiSendMessage({
+        phoneDigits: to,
+        message: input.body,
+      });
+      if (sent.ok) {
+        return {
+          ok: true,
+          channel: "whatsapp",
+          to,
+          body: input.body,
+          provider: "green-api",
+          messageSid: sent.idMessage,
+          deepLink,
+          sentAt,
+        };
+      }
+      return {
+        ok: false,
+        channel: "whatsapp",
+        to,
+        body: input.body,
+        provider: "green-api",
+        deepLink,
+        error: sent.error,
+        sentAt,
+      };
+    }
+    // Fall through to Twilio / deep link if not yet QR-linked
+  }
+
+  return sendViaTwilio(to, input.body, deepLink, sentAt);
 }

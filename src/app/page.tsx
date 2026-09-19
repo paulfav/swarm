@@ -1,3 +1,4 @@
+import { ChannelStatus } from "@/components/channel-status";
 import { IntakeForm } from "@/components/intake-form";
 import { listDealsAsync } from "@/lib/store";
 import Link from "next/link";
@@ -51,6 +52,8 @@ export default async function HomePage() {
           <IntakeForm />
         </div>
       </header>
+
+      <ChannelStatus />
 
       <section className="section" id="demos">
         <h2>Each product gets its own room</h2>
