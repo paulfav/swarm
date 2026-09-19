@@ -8,12 +8,24 @@ export const maxDuration = 120;
 export default async function HomePage() {
   const deals = await listDealsAsync();
   const demos = deals.filter((d) => d.id.includes("_demo"));
+  const agentEmail =
+    process.env.CHINA_ACCESS_AGENT_EMAIL ||
+    process.env.CHINA_ACCESS_MAILTM_ADDRESS ||
+    null;
+  const inboxReady = Boolean(
+    process.env.CHINA_ACCESS_MAILTM_ADDRESS &&
+      process.env.CHINA_ACCESS_MAILTM_PASSWORD,
+  );
 
   return (
     <div className="landing">
       <nav className="site-nav">
         <div className="brand-mark">China Access</div>
-        <span>Hard goods · live China sourcing</span>
+        <span>
+          {inboxReady
+            ? `Inbox live · ${agentEmail}`
+            : "Hard goods · live China sourcing"}
+        </span>
       </nav>
 
       <header className="hero-landing">

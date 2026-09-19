@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/ensure-inbox.mjs && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "inbox:setup": "node scripts/ensure-inbox.mjs"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

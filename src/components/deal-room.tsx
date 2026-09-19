@@ -449,8 +449,8 @@ function Actions({
           </button>
         </div>
         <p className="module-note">
-          Replies: paste into Supplier thread, poll IMAP inbox, or hit email /
-          WhatsApp webhooks.
+          Replies: paste into Supplier thread, poll agent inbox (mail.tm auto-setup),
+          or email/WhatsApp webhooks. Agent email is set in env.
         </p>
         {error ? <p className="form-error">{error}</p> : null}
       </div>

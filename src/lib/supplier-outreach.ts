@@ -36,6 +36,7 @@ function defaultIdentity(): AgentIdentity {
   return {
     email:
       process.env.CHINA_ACCESS_AGENT_EMAIL ||
+      process.env.CHINA_ACCESS_MAILTM_ADDRESS ||
       "paul.faverjon@student-cs.fr",
     fullName: process.env.CHINA_ACCESS_AGENT_NAME || "China Access Agent",
     company: process.env.CHINA_ACCESS_AGENT_COMPANY || "China Access",

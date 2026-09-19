@@ -129,7 +129,8 @@ export async function pollAndIngestReplies(deal: Deal): Promise<{
       matched: 0,
       inboxConfigured: false,
       error:
-        "IMAP not configured. Set CHINA_ACCESS_IMAP_USER/PASS (and optional HOST) or paste a reply.",
+        inbox.error ||
+        "No inbox configured. Set CHINA_ACCESS_MAILTM_* or CHINA_ACCESS_IMAP_*.",
     };
   }
   if (inbox.error) {
