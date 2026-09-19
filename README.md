@@ -1,39 +1,59 @@
 # China Access
 
-Hard-goods factory sourcing with **generative deal rooms** and **live China marketplace search**.
+Hard-goods factory sourcing with generative deal rooms, live China marketplace search, multi-channel supplier outreach, and reply retranscription.
 
-## Product rules (v1)
+## Product rules
 
-- Hard goods only
-- No sampling loop
-- No direct client ↔ factory chat
-- **Live scrape** of Made-in-China + AliExpress on each inquiry (Alibaba attempted; often CAPTCHA-blocked from cloud IPs)
-- Deal room retranscribes sourcing + (later) factory negotiation
-- Each product gets a tailored UI blueprint
+- Hard goods only · no sampling · client never chats with the factory
+- Agent sources + talks to suppliers; deal room shows retranscription
 
-## Live sourcing
+## Live loop
 
-`src/lib/china-source.ts` launches Playwright and queries:
+1. **Source** — Made-in-China + AliExpress (Alibaba often CAPTCHA-blocked)
+2. **Contact** — Made-in-China inquiry (live) + WhatsApp (Twilio if configured) + WeChat/WeCom (if configured)
+3. **Replies** — paste into Supplier thread, poll IMAP inbox, or email/WhatsApp webhooks → parse FOB/MOQ/lead time → refresh landed quote
 
-1. **Made-in-China.com** — factory storefront listings (primary)
-2. **AliExpress** — export retail price signal
-3. **Alibaba.com** — attempted; datacenter IPs usually hit CAPTCHA
-
-Results are attached to the deal (`sourcing.listings`) and rendered in the deal room.
-
-WhatsApp/WeChat bridge is still future work. **Made-in-China inquiry outreach is live**: the deal room **Contact supplier** button sends a real inquiry to the factory contact (e.g. Ms. He) via MIC's form.
-
-Configure agent identity (optional):
+## Configure (optional)
 
 ```bash
+# Agent identity (MIC inquiry “from”)
 export CHINA_ACCESS_AGENT_EMAIL=you@example.com
 export CHINA_ACCESS_AGENT_NAME="China Access Agent"
 export CHINA_ACCESS_AGENT_COMPANY="China Access"
 export CHINA_ACCESS_AGENT_MOBILE=5550100123
+
+# Inbound email (IMAP poll)
+export CHINA_ACCESS_IMAP_HOST=imap.gmail.com
+export CHINA_ACCESS_IMAP_USER=you@example.com
+export CHINA_ACCESS_IMAP_PASS=app-password
+
+# Email webhook secret
+export CHINA_ACCESS_WEBHOOK_SECRET=...
+
+# WhatsApp via Twilio
+export TWILIO_ACCOUNT_SID=...
+export TWILIO_AUTH_TOKEN=...
+export TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+
+# WeChat Work (WeCom)
+export WECOM_CORP_ID=...
+export WECOM_SECRET=...
+export WECOM_AGENT_ID=...
+```
+
+## Run
+
+```bash
+npm install
+npx playwright install chromium
+npm run dev
 ```
 
 ## API
 
-- `POST /api/deals/:id/contact` — send real Made-in-China inquiry to top MIC listing
-- `POST /api/deals/:id/actions` — `{ action: "approve" | "request_change" | "reject", note? }`
-- `POST /api/inquiries` — create inquiry → live source + generative deal room
+- `POST /api/inquiries` — create + live source
+- `POST /api/deals/:id/contact` — MIC + WhatsApp/WeChat outreach
+- `POST /api/deals/:id/replies` — `{ text, channel? }` ingest supplier reply
+- `POST /api/deals/:id/poll-replies` — IMAP poll + ingest
+- `POST /api/webhooks/email` — inbound email JSON
+- `POST /api/webhooks/whatsapp` — Twilio WhatsApp inbound

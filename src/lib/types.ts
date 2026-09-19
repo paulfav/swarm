@@ -7,7 +7,8 @@ export type DealStatus =
   | "qc"
   | "shipped"
   | "closed"
-  | "rejected";
+  | "rejected"
+  | "awaiting_reply";
 
 export type HardGoodsCategory =
   | "sofa"
@@ -127,6 +128,10 @@ export type DealRoomModule =
       title: string;
     }
   | {
+      type: "supplier_thread";
+      title: string;
+    }
+  | {
       type: "negotiation_timeline";
       title: string;
     }
@@ -179,19 +184,48 @@ export interface SourceAttemptView {
   listingCount: number;
 }
 
+export type OutreachChannel =
+  | "made-in-china-inquiry"
+  | "whatsapp"
+  | "wechat"
+  | "email";
+
 export interface OutreachRecord {
   ok: boolean;
-  channel: "made-in-china-inquiry";
+  channel: OutreachChannel;
   supplierName?: string;
   contactPerson?: string;
-  listingUrl: string;
+  listingUrl?: string;
   message: string;
-  identityEmail: string;
+  identityEmail?: string;
   successUrl?: string;
   inquiryId?: string;
-  steps: string[];
+  whatsappTo?: string;
+  wechatId?: string;
+  deepLink?: string;
+  steps?: string[];
   error?: string;
   sentAt: string;
+}
+
+export interface ThreadMessage {
+  id: string;
+  at: string;
+  direction: "outbound" | "inbound";
+  channel: OutreachChannel | "system";
+  author: "agent" | "supplier" | "system";
+  body: string;
+  retranscription?: string;
+  meta?: Record<string, string>;
+}
+
+export interface SupplierContactInfo {
+  whatsapp?: string;
+  wechat?: string;
+  email?: string;
+  phone?: string;
+  contactPerson?: string;
+  pageUrl?: string;
 }
 
 export interface Deal {
@@ -209,15 +243,15 @@ export interface Deal {
   budgetUsd?: number;
   providerName: string;
   providerCity: string;
-  /** Live China marketplace scrape attached to this deal */
   sourcing?: {
     live: boolean;
     query: string;
     attempts: SourceAttemptView[];
     listings: SourcedListingView[];
   };
-  /** Real supplier outreach attempts */
+  contacts?: SupplierContactInfo;
   outreach?: OutreachRecord[];
+  thread?: ThreadMessage[];
   blueprint: DealRoomBlueprint;
   timeline: TimelineEvent[];
   quote: Quote;

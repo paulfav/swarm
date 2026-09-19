@@ -275,6 +275,7 @@ export function generateDealRoomBlueprint(
     type: "negotiation_timeline",
     title: "Negotiation retranscription",
   });
+  modules.push({ type: "supplier_thread", title: "Supplier thread" });
   modules.push({ type: "landed_quote", title: "Landed quote" });
   modules.push({ type: "actions", title: "Your move" });
 

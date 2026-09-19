@@ -187,6 +187,153 @@ function LandedQuote({ title, quote }: { title: string; quote: Quote }) {
   );
 }
 
+function SupplierThread({
+  deal,
+  onUpdated,
+}: {
+  deal: Deal;
+  onUpdated: (deal: Deal) => void;
+}) {
+  const [paste, setPaste] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState<string>();
+  const [error, setError] = useState<string>();
+  const messages = deal.thread ?? [];
+
+  async function pasteReply() {
+    if (!paste.trim()) return;
+    setBusy(true);
+    setError(undefined);
+    setInfo(undefined);
+    try {
+      const res = await fetch(`/api/deals/${deal.id}/replies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: paste, channel: "email" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed");
+      onUpdated(data.deal);
+      setPaste("");
+      setInfo("Reply ingested — quote refreshed if FOB/MOQ/lead time found.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pollInbox() {
+    setBusy(true);
+    setError(undefined);
+    setInfo(undefined);
+    try {
+      const res = await fetch(`/api/deals/${deal.id}/poll-replies`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Poll failed");
+      onUpdated(data.deal);
+      if (!data.inboxConfigured) {
+        setInfo(data.error || "IMAP not configured — paste a reply instead.");
+      } else if (data.error) {
+        setError(data.error);
+      } else {
+        setInfo(`Matched ${data.matched} inbox message(s).`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Poll failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const waLink = deal.outreach?.find((o) => o.channel === "whatsapp")?.deepLink;
+
+  return (
+    <ModuleShell title="Supplier thread" wide>
+      <div className="thread">
+        <div className="thread-meta">
+          <span>
+            Contacts:{" "}
+            {deal.contacts?.contactPerson || "—"}
+            {deal.contacts?.whatsapp
+              ? ` · WA +${deal.contacts.whatsapp}`
+              : " · no WhatsApp"}
+            {deal.contacts?.wechat
+              ? ` · WeChat ${deal.contacts.wechat}`
+              : " · no WeChat"}
+          </span>
+          {waLink ? (
+            <a href={waLink} target="_blank" rel="noreferrer">
+              Open WhatsApp deep link
+            </a>
+          ) : null}
+        </div>
+
+        <ol className="thread-list">
+          {messages.length === 0 ? (
+            <li className="thread-empty">
+              No messages yet. Contact supplier to start the thread.
+            </li>
+          ) : (
+            messages.map((m) => (
+              <li
+                key={m.id}
+                className={`thread-msg dir-${m.direction} author-${m.author}`}
+              >
+                <div className="thread-msg-meta">
+                  <span>
+                    {m.direction} · {m.channel} · {m.author}
+                  </span>
+                  <span>{timeLabel(m.at)}</span>
+                </div>
+                <p className="thread-body">
+                  {m.retranscription || m.body}
+                </p>
+                {m.retranscription && m.body !== m.retranscription ? (
+                  <details>
+                    <summary>Original</summary>
+                    <pre>{m.body}</pre>
+                  </details>
+                ) : null}
+              </li>
+            ))
+          )}
+        </ol>
+
+        <textarea
+          rows={4}
+          placeholder="Paste supplier reply (email/WhatsApp/WeChat text). We'll retranscribe + parse FOB / MOQ / lead time into the quote."
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+          disabled={busy}
+        />
+        <div className="action-row">
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy || !paste.trim()}
+            onClick={() => pasteReply()}
+          >
+            Ingest reply
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={busy}
+            onClick={() => pollInbox()}
+          >
+            Poll agent inbox
+          </button>
+        </div>
+        {info ? <p className="module-note">{info}</p> : null}
+        {error ? <p className="form-error">{error}</p> : null}
+      </div>
+    </ModuleShell>
+  );
+}
+
 function Actions({
   dealId,
   status,
@@ -234,8 +381,11 @@ function Actions({
         return;
       }
       onUpdated(data.deal);
-      if (data.outreach && !data.outreach.ok) {
-        setError(data.outreach.error || "Outreach did not confirm success");
+      const failed = (data.deal.outreach || []).filter(
+        (o: { ok: boolean }) => !o.ok,
+      );
+      if (failed.length && !(data.deal.outreach || []).some((o: { ok: boolean }) => o.ok)) {
+        setError(failed[failed.length - 1]?.error || "Outreach did not confirm");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Contact failed");
@@ -251,8 +401,9 @@ function Actions({
     <ModuleShell title="Your move" wide>
       <div className="actions">
         <p className="actions-lead">
-          Status: <strong>{status.replaceAll("_", " ")}</strong>. Buttons become
-          agent intents — they do not open a factory chat for you.
+          Status: <strong>{status.replaceAll("_", " ")}</strong>. Contact
+          supplier hits Made-in-China (+ WhatsApp/WeChat when found). You never
+          chat with the factory.
         </p>
         <textarea
           placeholder="Optional note for the agent (e.g. push MOQ, ask for darker linen)"
@@ -269,7 +420,7 @@ function Actions({
             onClick={() => contactSupplier()}
           >
             {contacting
-              ? "Messaging supplier on Made-in-China…"
+              ? "Contacting supplier channels…"
               : "Contact supplier"}
           </button>
           <button
@@ -298,9 +449,8 @@ function Actions({
           </button>
         </div>
         <p className="module-note">
-          Contact supplier sends a real Made-in-China inquiry to the factory
-          contact (e.g. Ms. He). Replies land in the agent inbox email — you only
-          see the retranscription here.
+          Replies: paste into Supplier thread, poll IMAP inbox, or hit email /
+          WhatsApp webhooks.
         </p>
         {error ? <p className="form-error">{error}</p> : null}
       </div>
@@ -492,6 +642,10 @@ function renderModule(
     case "negotiation_timeline":
       return (
         <Timeline key="timeline" title={module.title} events={deal.timeline} />
+      );
+    case "supplier_thread":
+      return (
+        <SupplierThread key="thread" deal={deal} onUpdated={onUpdated} />
       );
     case "landed_quote":
       return (

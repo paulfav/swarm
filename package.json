@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "cheerio": "^1.2.0",
+    "imapflow": "^2.0.5",
     "next": "15.5.25",
     "playwright": "^1.63.0",
     "react": "19.1.0",

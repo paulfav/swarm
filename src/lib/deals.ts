@@ -1,3 +1,5 @@
+import { sendWeChat } from "./channels/wechat";
+import { sendWhatsApp } from "./channels/whatsapp";
 import { classifyHardGood } from "./categories";
 import {
   prettySupplier,
@@ -7,6 +9,8 @@ import {
 } from "./china-source";
 import { generateDealRoomBlueprint } from "./generate-deal-room";
 import { buildLandedQuote } from "./landed-cost";
+import { appendOutboundThread } from "./replies";
+import { scrapeSupplierContacts } from "./supplier-contacts";
 import {
   buildQuoteRequestMessage,
   contactMadeInChinaSupplier,
@@ -447,7 +451,7 @@ export function applyDealAction(
   };
 }
 
-/** Send a real Made-in-China inquiry to the top live listing supplier. */
+/** Multi-channel supplier contact: MIC inquiry + WhatsApp/WeChat when available. */
 export async function contactSupplierOnDeal(deal: Deal): Promise<Deal> {
   const listing =
     deal.sourcing?.listings.find((l) => l.source === "made-in-china") ||
@@ -478,72 +482,216 @@ export async function contactSupplierOnDeal(deal: Deal): Promise<Deal> {
     };
   }
 
+  const contacts =
+    deal.contacts?.pageUrl === listing.url
+      ? deal.contacts
+      : await scrapeSupplierContacts(listing.url).catch(() => deal.contacts);
+
   const message = buildQuoteRequestMessage({
     productTitle: deal.title,
     description: deal.description,
     quantity: deal.quantity,
     destinationCountry: deal.destinationCountry,
+    contactName: contacts?.contactPerson,
   });
 
-  const result = await contactMadeInChinaSupplier({
+  let updated: Deal = {
+    ...deal,
+    contacts: contacts || deal.contacts,
+    updatedAt: now,
+  };
+
+  const outreach: OutreachRecord[] = [...(deal.outreach ?? [])];
+  const timeline: TimelineEvent[] = [...deal.timeline];
+
+  // 1) Made-in-China inquiry (primary, proven)
+  const mic = await contactMadeInChinaSupplier({
     listingUrl: listing.url,
     supplierName: listing.supplierName,
     productTitle: listing.title,
     message,
   });
+  outreach.push({
+    ok: mic.ok,
+    channel: "made-in-china-inquiry",
+    supplierName: mic.supplierName,
+    contactPerson: mic.contactPerson,
+    listingUrl: listing.url,
+    message,
+    identityEmail: mic.identityEmail,
+    successUrl: mic.successUrl,
+    inquiryId: mic.inquiryId,
+    steps: mic.steps,
+    error: mic.error,
+    sentAt: mic.sentAt,
+  });
 
-  const record: OutreachRecord = result;
-  const outreach = [...(deal.outreach ?? []), record];
-
-  if (!result.ok) {
-    return {
-      ...deal,
-      updatedAt: now,
-      status: "negotiating",
-      outreach,
-      timeline: [
-        ...deal.timeline,
-        event({
-          actor: "agent",
-          kind: "risk",
-          title: "Supplier outreach failed",
-          body: result.error || "Made-in-China inquiry did not confirm success",
-          facts: { listing: listing.url },
-        }),
-      ],
-    };
-  }
-
-  return {
-    ...deal,
-    updatedAt: now,
-    status: "negotiating",
-    providerName: result.supplierName || deal.providerName,
-    outreach,
-    timeline: [
-      ...deal.timeline,
+  if (mic.ok) {
+    updated = appendOutboundThread(updated, {
+      at: mic.sentAt,
+      channel: "made-in-china-inquiry",
+      body: message,
+      retranscription: `Sent Made-in-China inquiry to ${mic.contactPerson || "supplier"} (${mic.supplierName || listing.supplierName || "factory"}).`,
+      meta: {
+        inquiry_id: mic.inquiryId || "",
+        success_url: mic.successUrl || "",
+      },
+    });
+    timeline.push(
       event({
         actor: "agent",
         kind: "asked",
         title: "Agent messaged supplier on Made-in-China",
-        body: `Sent FOB quote request to ${result.contactPerson || "supplier contact"} at ${result.supplierName || listing.supplierName || "factory"}.`,
+        body: `Sent FOB quote request to ${mic.contactPerson || "supplier contact"} at ${mic.supplierName || listing.supplierName || "factory"}.`,
         facts: {
           channel: "made-in-china-inquiry",
-          contact: result.contactPerson || "—",
-          inquiry_id: result.inquiryId || "—",
-          reply_to: result.identityEmail,
+          contact: mic.contactPerson || "—",
+          inquiry_id: mic.inquiryId || "—",
+          reply_to: mic.identityEmail,
         },
       }),
+    );
+  } else {
+    timeline.push(
       event({
-        actor: "factory",
-        kind: "status",
-        title: "Inquiry delivered — awaiting supplier reply",
-        body: `Made-in-China confirmed “Sent Successfully”. Supplier reply will go to ${result.identityEmail}. Client still has no direct chat — agent will retranscribe the answer here.`,
-        facts: {
-          success_url: result.successUrl || "—",
-        },
+        actor: "agent",
+        kind: "risk",
+        title: "Made-in-China outreach failed",
+        body: mic.error || "Inquiry did not confirm success",
+        facts: { listing: listing.url },
       }),
-    ],
+    );
+  }
+
+  // 2) WhatsApp if number found
+  if (contacts?.whatsapp) {
+    const wa = await sendWhatsApp({ to: contacts.whatsapp, body: message });
+    outreach.push({
+      ok: wa.ok,
+      channel: "whatsapp",
+      listingUrl: listing.url,
+      message,
+      whatsappTo: wa.to,
+      deepLink: wa.deepLink,
+      error: wa.error,
+      sentAt: wa.sentAt,
+      contactPerson: contacts.contactPerson,
+      supplierName: listing.supplierName,
+    });
+    if (wa.ok) {
+      updated = appendOutboundThread(updated, {
+        at: wa.sentAt,
+        channel: "whatsapp",
+        body: message,
+        retranscription: `WhatsApp sent to +${wa.to} via Twilio.`,
+        meta: { sid: wa.messageSid || "", to: wa.to },
+      });
+      timeline.push(
+        event({
+          actor: "agent",
+          kind: "asked",
+          title: "Agent messaged supplier on WhatsApp",
+          body: `Twilio WhatsApp delivered to +${wa.to}.`,
+          facts: { channel: "whatsapp", to: wa.to },
+        }),
+      );
+    } else {
+      timeline.push(
+        event({
+          actor: "agent",
+          kind: "status",
+          title: "WhatsApp ready (not auto-sent)",
+          body: wa.error || "WhatsApp deep link prepared for agent.",
+          facts: {
+            channel: "whatsapp",
+            to: wa.to,
+            deep_link: wa.deepLink || "—",
+          },
+        }),
+      );
+    }
+  } else {
+    timeline.push(
+      event({
+        actor: "system",
+        kind: "status",
+        title: "No WhatsApp number on supplier page",
+        body: "Continuing with Made-in-China inquiry channel.",
+      }),
+    );
+  }
+
+  // 3) WeChat if ID found
+  if (contacts?.wechat) {
+    const wx = await sendWeChat({ wechatId: contacts.wechat, body: message });
+    outreach.push({
+      ok: wx.ok,
+      channel: "wechat",
+      listingUrl: listing.url,
+      message,
+      wechatId: wx.wechatId,
+      error: wx.error,
+      sentAt: wx.sentAt,
+      contactPerson: contacts.contactPerson,
+      supplierName: listing.supplierName,
+    });
+    timeline.push(
+      event({
+        actor: "agent",
+        kind: wx.ok ? "asked" : "status",
+        title: wx.ok
+          ? "Agent messaged supplier on WeChat"
+          : "WeChat ID captured — queued for ops",
+        body: wx.ok
+          ? `WeCom message to ${wx.wechatId}.`
+          : `${wx.error} WeChat ID: ${wx.wechatId}`,
+        facts: { channel: "wechat", wechat_id: wx.wechatId },
+      }),
+    );
+    if (wx.ok) {
+      updated = appendOutboundThread(updated, {
+        at: wx.sentAt,
+        channel: "wechat",
+        body: message,
+        meta: { wechat_id: wx.wechatId },
+      });
+    }
+  }
+
+  const anyOk = outreach.some((o) => o.ok);
+  timeline.push(
+    event({
+      actor: "system",
+      kind: "status",
+      title: anyOk
+        ? "Outreach sent — awaiting supplier reply"
+        : "Outreach incomplete",
+      body: anyOk
+        ? `Replies: poll agent inbox, email webhook, or paste into the supplier thread. Client never chats directly.`
+        : "No channel confirmed delivery. Check MIC/WhatsApp/WeChat configuration.",
+    }),
+  );
+
+  // Ensure supplier_thread module exists
+  let blueprint = updated.blueprint;
+  if (!blueprint.modules.some((m) => m.type === "supplier_thread")) {
+    const mods = [...blueprint.modules];
+    const idx = mods.findIndex((m) => m.type === "negotiation_timeline");
+    mods.splice(idx >= 0 ? idx : mods.length - 1, 0, {
+      type: "supplier_thread",
+      title: "Supplier thread",
+    });
+    blueprint = { ...blueprint, modules: mods };
+  }
+
+  return {
+    ...updated,
+    status: anyOk ? "awaiting_reply" : "negotiating",
+    providerName: mic.supplierName || updated.providerName,
+    outreach,
+    timeline,
+    blueprint,
+    contacts: contacts || updated.contacts,
   };
 }
 
