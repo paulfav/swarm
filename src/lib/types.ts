@@ -179,6 +179,21 @@ export interface SourceAttemptView {
   listingCount: number;
 }
 
+export interface OutreachRecord {
+  ok: boolean;
+  channel: "made-in-china-inquiry";
+  supplierName?: string;
+  contactPerson?: string;
+  listingUrl: string;
+  message: string;
+  identityEmail: string;
+  successUrl?: string;
+  inquiryId?: string;
+  steps: string[];
+  error?: string;
+  sentAt: string;
+}
+
 export interface Deal {
   id: string;
   createdAt: string;
@@ -201,6 +216,8 @@ export interface Deal {
     attempts: SourceAttemptView[];
     listings: SourcedListingView[];
   };
+  /** Real supplier outreach attempts */
+  outreach?: OutreachRecord[];
   blueprint: DealRoomBlueprint;
   timeline: TimelineEvent[];
   quote: Quote;

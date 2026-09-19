@@ -21,29 +21,19 @@ Hard-goods factory sourcing with **generative deal rooms** and **live China mark
 
 Results are attached to the deal (`sourcing.listings`) and rendered in the deal room.
 
-WhatsApp/WeChat factory chat bridge is **not** connected yet — timeline is honest about that.
+WhatsApp/WeChat bridge is still future work. **Made-in-China inquiry outreach is live**: the deal room **Contact supplier** button sends a real inquiry to the factory contact (e.g. Ms. He) via MIC's form.
 
-## Stack
-
-- Next.js 15 (App Router) + TypeScript + Tailwind CSS v4
-- Playwright Chromium for marketplace browse
-- In-memory deal store
-
-## Run
+Configure agent identity (optional):
 
 ```bash
-npm install
-npx playwright install chromium
-npm run dev
+export CHINA_ACCESS_AGENT_EMAIL=you@example.com
+export CHINA_ACCESS_AGENT_NAME="China Access Agent"
+export CHINA_ACCESS_AGENT_COMPANY="China Access"
+export CHINA_ACCESS_AGENT_MOBILE=5550100123
 ```
-
-Opening a deal takes ~15–40s while marketplaces are scraped.
-
-Demo deals: `/deals/deal_sofa_demo`, `/deals/deal_lamp_demo`, `/deals/deal_table_demo`
 
 ## API
 
-- `GET /api/inquiries` — list deals
-- `POST /api/inquiries` — create inquiry → live source + generative deal room
-- `GET /api/deals/:id` — fetch deal
+- `POST /api/deals/:id/contact` — send real Made-in-China inquiry to top MIC listing
 - `POST /api/deals/:id/actions` — `{ action: "approve" | "request_change" | "reject", note? }`
+- `POST /api/inquiries` — create inquiry → live source + generative deal room

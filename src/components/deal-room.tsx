@@ -191,13 +191,16 @@ function Actions({
   dealId,
   status,
   onUpdated,
+  canContact,
 }: {
   dealId: string;
   status: string;
   onUpdated: (deal: Deal) => void;
+  canContact: boolean;
 }) {
   const [note, setNote] = useState("");
   const [pending, startTransition] = useTransition();
+  const [contacting, setContacting] = useState(false);
   const [error, setError] = useState<string>();
 
   function run(action: "approve" | "request_change" | "reject") {
@@ -218,27 +221,61 @@ function Actions({
     });
   }
 
+  async function contactSupplier() {
+    setError(undefined);
+    setContacting(true);
+    try {
+      const res = await fetch(`/api/deals/${dealId}/contact`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Contact failed");
+        return;
+      }
+      onUpdated(data.deal);
+      if (data.outreach && !data.outreach.ok) {
+        setError(data.outreach.error || "Outreach did not confirm success");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Contact failed");
+    } finally {
+      setContacting(false);
+    }
+  }
+
   const locked = status === "rejected" || status === "deposit_due";
+  const busy = pending || contacting;
 
   return (
     <ModuleShell title="Your move" wide>
       <div className="actions">
         <p className="actions-lead">
           Status: <strong>{status.replaceAll("_", " ")}</strong>. Buttons become
-          agent intents — they do not open a factory chat.
+          agent intents — they do not open a factory chat for you.
         </p>
         <textarea
           placeholder="Optional note for the agent (e.g. push MOQ, ask for darker linen)"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          disabled={locked || pending}
+          disabled={locked || busy}
           rows={3}
         />
         <div className="action-row">
           <button
             type="button"
             className="btn-primary"
-            disabled={locked || pending}
+            disabled={!canContact || busy}
+            onClick={() => contactSupplier()}
+          >
+            {contacting
+              ? "Messaging supplier on Made-in-China…"
+              : "Contact supplier"}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={locked || busy}
             onClick={() => run("approve")}
           >
             Approve quote
@@ -246,7 +283,7 @@ function Actions({
           <button
             type="button"
             className="btn-secondary"
-            disabled={status === "rejected" || pending}
+            disabled={status === "rejected" || busy}
             onClick={() => run("request_change")}
           >
             Request change
@@ -254,12 +291,17 @@ function Actions({
           <button
             type="button"
             className="btn-ghost"
-            disabled={status === "rejected" || pending}
+            disabled={status === "rejected" || busy}
             onClick={() => run("reject")}
           >
             Reject match
           </button>
         </div>
+        <p className="module-note">
+          Contact supplier sends a real Made-in-China inquiry to the factory
+          contact (e.g. Ms. He). Replies land in the agent inbox email — you only
+          see the retranscription here.
+        </p>
         {error ? <p className="form-error">{error}</p> : null}
       </div>
     </ModuleShell>
@@ -461,6 +503,9 @@ function renderModule(
           key="actions"
           dealId={deal.id}
           status={deal.status}
+          canContact={Boolean(
+            deal.sourcing?.listings?.some((l) => l.source === "made-in-china"),
+          )}
           onUpdated={onUpdated}
         />
       );

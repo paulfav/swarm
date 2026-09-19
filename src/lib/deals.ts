@@ -7,11 +7,16 @@ import {
 } from "./china-source";
 import { generateDealRoomBlueprint } from "./generate-deal-room";
 import { buildLandedQuote } from "./landed-cost";
+import {
+  buildQuoteRequestMessage,
+  contactMadeInChinaSupplier,
+} from "./supplier-outreach";
 import type {
   Deal,
   DealStatus,
   HardGoodsCategory,
   InquiryInput,
+  OutreachRecord,
   SourceAttemptView,
   TimelineEvent,
 } from "./types";
@@ -196,8 +201,8 @@ function buildLiveTimeline(
       at: at(0),
       actor: "agent",
       kind: "status",
-      title: "Factory chat not opened yet",
-      body: "Next step (not in this build): agent opens WeChat/WhatsApp to the supplier storefront contact. Deal room will retranscribe — client still has no direct chat.",
+      title: "Ready to contact supplier",
+      body: "Click Contact supplier in the deal room to send a real Made-in-China inquiry. Replies go to the agent email and get retranscribed here — client never chats directly.",
     });
   } else {
     events.push({
@@ -425,14 +430,14 @@ export function applyDealAction(
         kind: "pushed",
         title: "Agent queued supplier follow-up",
         body: deal.sourcing?.listings[0]
-          ? `Would message contact on ${deal.sourcing.listings[0].source}: ${deal.sourcing.listings[0].url}`
+          ? `Will use Contact supplier on ${deal.sourcing.listings[0].source}: ${deal.sourcing.listings[0].url}`
           : "No live listing URL on file — refine sourcing first.",
       }),
       event({
-        actor: "factory",
-        kind: "agreed",
-        title: "Draft revised FOB (simulated pending chat bridge)",
-        body: `Working FOB $${newFactory}. WhatsApp/WeChat bridge not connected yet — quote refreshed to v${quote.version} for deal-room UX.`,
+        actor: "system",
+        kind: "status",
+        title: "Quote draft adjusted locally",
+        body: `Working FOB $${newFactory} (v${quote.version}). Use Contact supplier to send a real Made-in-China inquiry.`,
         facts: {
           fob_usd: `$${newFactory}`,
           quote_version: String(quote.version),
@@ -441,3 +446,104 @@ export function applyDealAction(
     ],
   };
 }
+
+/** Send a real Made-in-China inquiry to the top live listing supplier. */
+export async function contactSupplierOnDeal(deal: Deal): Promise<Deal> {
+  const listing =
+    deal.sourcing?.listings.find((l) => l.source === "made-in-china") ||
+    deal.sourcing?.listings[0];
+
+  const now = new Date().toISOString();
+  const event = (
+    partial: Omit<TimelineEvent, "id" | "at">,
+  ): TimelineEvent => ({
+    id: id("evt"),
+    at: now,
+    ...partial,
+  });
+
+  if (!listing || listing.source !== "made-in-china") {
+    return {
+      ...deal,
+      updatedAt: now,
+      timeline: [
+        ...deal.timeline,
+        event({
+          actor: "system",
+          kind: "risk",
+          title: "Cannot contact supplier yet",
+          body: "Need a Made-in-China listing on this deal. Re-run sourcing or pick a MIC factory card.",
+        }),
+      ],
+    };
+  }
+
+  const message = buildQuoteRequestMessage({
+    productTitle: deal.title,
+    description: deal.description,
+    quantity: deal.quantity,
+    destinationCountry: deal.destinationCountry,
+  });
+
+  const result = await contactMadeInChinaSupplier({
+    listingUrl: listing.url,
+    supplierName: listing.supplierName,
+    productTitle: listing.title,
+    message,
+  });
+
+  const record: OutreachRecord = result;
+  const outreach = [...(deal.outreach ?? []), record];
+
+  if (!result.ok) {
+    return {
+      ...deal,
+      updatedAt: now,
+      status: "negotiating",
+      outreach,
+      timeline: [
+        ...deal.timeline,
+        event({
+          actor: "agent",
+          kind: "risk",
+          title: "Supplier outreach failed",
+          body: result.error || "Made-in-China inquiry did not confirm success",
+          facts: { listing: listing.url },
+        }),
+      ],
+    };
+  }
+
+  return {
+    ...deal,
+    updatedAt: now,
+    status: "negotiating",
+    providerName: result.supplierName || deal.providerName,
+    outreach,
+    timeline: [
+      ...deal.timeline,
+      event({
+        actor: "agent",
+        kind: "asked",
+        title: "Agent messaged supplier on Made-in-China",
+        body: `Sent FOB quote request to ${result.contactPerson || "supplier contact"} at ${result.supplierName || listing.supplierName || "factory"}.`,
+        facts: {
+          channel: "made-in-china-inquiry",
+          contact: result.contactPerson || "—",
+          inquiry_id: result.inquiryId || "—",
+          reply_to: result.identityEmail,
+        },
+      }),
+      event({
+        actor: "factory",
+        kind: "status",
+        title: "Inquiry delivered — awaiting supplier reply",
+        body: `Made-in-China confirmed “Sent Successfully”. Supplier reply will go to ${result.identityEmail}. Client still has no direct chat — agent will retranscribe the answer here.`,
+        facts: {
+          success_url: result.successUrl || "—",
+        },
+      }),
+    ],
+  };
+}
+
