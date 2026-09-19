@@ -393,6 +393,60 @@ function renderModule(
           </ul>
         </ModuleShell>
       );
+    case "live_listings":
+      return (
+        <ModuleShell key="live" title={module.title} wide>
+          <div className="live-source-meta">
+            {deal.sourcing ? (
+              <>
+                <p>
+                  Query: <strong>{deal.sourcing.query}</strong> ·{" "}
+                  {deal.sourcing.live ? "live hits" : "no live hits"}
+                </p>
+                <ul className="source-attempts">
+                  {deal.sourcing.attempts.map((a) => (
+                    <li key={a.source} className={`attempt-${a.status}`}>
+                      <strong>{a.source}</strong> — {a.status}: {a.detail}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>No sourcing payload on this deal.</p>
+            )}
+          </div>
+          <div className="live-listings">
+            {(deal.sourcing?.listings ?? []).map((listing) => (
+              <a
+                key={listing.url}
+                className="live-card"
+                href={listing.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {listing.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={listing.imageUrl} alt="" />
+                ) : (
+                  <div className="live-card-ph" />
+                )}
+                <div>
+                  <span className="live-source">{listing.source}</span>
+                  <strong>{listing.title}</strong>
+                  <em>
+                    {listing.supplierName || "Supplier"}
+                    {listing.priceUsd
+                      ? ` · $${listing.priceUsd}`
+                      : listing.rawPriceText
+                        ? ` · ${listing.rawPriceText}`
+                        : ""}
+                  </em>
+                </div>
+              </a>
+            ))}
+          </div>
+        </ModuleShell>
+      );
     case "negotiation_timeline":
       return (
         <Timeline key="timeline" title={module.title} events={deal.timeline} />

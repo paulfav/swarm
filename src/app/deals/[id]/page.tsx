@@ -1,6 +1,9 @@
 import { DealRoom } from "@/components/deal-room";
-import { getDeal } from "@/lib/store";
+import { getDealAsync } from "@/lib/store";
 import { notFound } from "next/navigation";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
 
 export default async function DealPage({
   params,
@@ -8,7 +11,7 @@ export default async function DealPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const deal = getDeal(id);
+  const deal = await getDealAsync(id);
   if (!deal) notFound();
   return <DealRoom initialDeal={deal} />;
 }

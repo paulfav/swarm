@@ -16,6 +16,7 @@ export interface BlueprintContext {
   dims?: { width: number; depth: number; height: number };
   cbm: number;
   finishes?: { name: string; hex: string; selected?: boolean }[];
+  includeLiveListings?: boolean;
 }
 
 function layoutFor(
@@ -96,8 +97,13 @@ export function generateDealRoomBlueprint(
     type: "match_evidence",
     title: "Producer match",
     confidence: ctx.confidence,
-    points:
-      ctx.category === "sofa"
+    points: ctx.includeLiveListings
+      ? [
+          "Listings pulled live from Chinese marketplaces (see Live China listings)",
+          "Made-in-China preferred for factory storefront signal; AliExpress for price",
+          "Alibaba/1688 attempted — CAPTCHA common from cloud IPs",
+        ]
+      : ctx.category === "sofa"
         ? [
             "Visual match on arm profile and seat depth cues",
             "Foshan upholstery cluster · export packaging experience",
@@ -115,6 +121,13 @@ export function generateDealRoomBlueprint(
               "Photo evidence requested before deposit release",
             ],
   });
+
+  if (ctx.includeLiveListings) {
+    modules.push({
+      type: "live_listings",
+      title: "Live China listings",
+    });
+  }
 
   if (ctx.category === "sofa" || ctx.category === "table" || ctx.dims) {
     const d = ctx.dims ?? { width: 220, depth: 95, height: 78 };

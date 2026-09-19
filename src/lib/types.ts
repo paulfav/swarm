@@ -123,6 +123,10 @@ export type DealRoomModule =
       points: string[];
     }
   | {
+      type: "live_listings";
+      title: string;
+    }
+  | {
       type: "negotiation_timeline";
       title: string;
     }
@@ -154,6 +158,27 @@ export interface InquiryInput {
   budgetUsd?: number;
 }
 
+export interface SourcedListingView {
+  source: "made-in-china" | "aliexpress" | "alibaba";
+  title: string;
+  url: string;
+  priceUsd?: number;
+  imageUrl?: string;
+  supplierName?: string;
+  supplierUrl?: string;
+  rawPriceText?: string;
+}
+
+export interface SourceAttemptView {
+  source: SourcedListingView["source"];
+  ok: boolean;
+  status: "ok" | "captcha" | "empty" | "error";
+  detail: string;
+  query: string;
+  searchedAt: string;
+  listingCount: number;
+}
+
 export interface Deal {
   id: string;
   createdAt: string;
@@ -169,6 +194,13 @@ export interface Deal {
   budgetUsd?: number;
   providerName: string;
   providerCity: string;
+  /** Live China marketplace scrape attached to this deal */
+  sourcing?: {
+    live: boolean;
+    query: string;
+    attempts: SourceAttemptView[];
+    listings: SourcedListingView[];
+  };
   blueprint: DealRoomBlueprint;
   timeline: TimelineEvent[];
   quote: Quote;

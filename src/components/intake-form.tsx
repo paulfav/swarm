@@ -120,11 +120,12 @@ export function IntakeForm() {
       {error ? <p className="form-error">{error}</p> : null}
 
       <button className="btn-primary" type="submit" disabled={busy}>
-        {busy ? "Coding your deal room…" : "Open deal room"}
+        {busy ? "Searching China marketplaces…" : "Open deal room"}
       </button>
       <p className="fineprint">
-        Hard goods only · no sampling · you never chat with the factory — the
-        agent negotiates in Chinese and this UI retranscribes it.
+        Live scrape of Made-in-China + AliExpress (Alibaba often CAPTCHA-blocked
+        from cloud IPs) · hard goods only · no sampling · you never chat with
+        the factory.
       </p>
     </form>
   );
