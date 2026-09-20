@@ -148,18 +148,84 @@ textarea {
   margin: 0 0 1rem;
 }
 
-.channel-status .wa-qr-block {
-  margin-top: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.75rem;
+.channel-status .wa-link-panel {
+  margin-top: 1.5rem;
+  display: grid;
+  gap: 1.5rem;
 }
 
-.channel-status .wa-qr-block img {
+@media (min-width: 800px) {
+  .channel-status .wa-link-panel {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.channel-status .wa-link-col h3 {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 500;
+  font-size: 1.15rem;
+  margin: 0 0 0.75rem;
+}
+
+.channel-status .wa-steps {
+  margin: 0 0 1rem;
+  padding-left: 1.2rem;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.channel-status .wa-hint {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+  max-width: 28rem;
+  line-height: 1.4;
+}
+
+.channel-status .wa-phone-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.channel-status .wa-phone-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+}
+
+.channel-status .wa-qr-img {
+  display: block;
   border: 1px solid var(--line);
   background: #fff;
-  padding: 0.5rem;
+  padding: 0.65rem;
+  width: 280px;
+  height: 280px;
+}
+
+.channel-status .wa-link-code {
+  margin: 0.85rem 0 0;
+  font-size: 1.05rem;
+}
+
+.channel-status .wa-link-code strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.08em;
+  font-size: 1.35rem;
+}
+
+.channel-status .wa-link-code span {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+
+.channel-status .wa-action-error {
+  margin-top: 0.75rem;
+  color: var(--danger);
 }
 
 .demo-grid {

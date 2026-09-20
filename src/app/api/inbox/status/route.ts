@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { pollAgentInbox } from "@/lib/channels/email-inbox";
 import {
   getGreenApiConfig,
-  greenApiGetQr,
   greenApiGetState,
 } from "@/lib/channels/green-api";
 
+export const dynamic = "force-dynamic";
+
+/**
+ * Channel status without fetching a QR code.
+ * QR must only be requested from /api/whatsapp/link so it stays fresh
+ * and isn't invalidated by concurrent polls.
+ */
 export async function GET() {
   const address =
     process.env.CHINA_ACCESS_AGENT_EMAIL ||
@@ -15,11 +21,6 @@ export async function GET() {
   const inbox = await pollAgentInbox({ limit: 5 });
   const greenCfg = getGreenApiConfig();
   const waState = greenCfg ? await greenApiGetState() : { configured: false };
-  let qr: { type?: string; message?: string } | null = null;
-  if (waState.stateInstance === "notAuthorized") {
-    const q = await greenApiGetQr();
-    if (q.ok) qr = { type: q.type, message: q.message };
-  }
 
   return NextResponse.json({
     agentEmail: address,
@@ -32,10 +33,7 @@ export async function GET() {
       idInstance: greenCfg?.idInstance || null,
       state: waState.stateInstance || null,
       authorized: waState.stateInstance === "authorized",
-      qr:
-        qr?.type === "qrCode" && qr.message
-          ? { mime: "image/png", base64: qr.message }
-          : null,
+      linkPath: "/api/whatsapp/link",
       error: waState.error || null,
       twilioConfigured: Boolean(
         process.env.TWILIO_ACCOUNT_SID &&

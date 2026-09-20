@@ -21,7 +21,12 @@ npm run whatsapp:setup   # provisions free Green-API WA instance → .env.local
 npm run dev              # both run automatically before next dev
 ```
 
-WhatsApp still needs **one** Linked-Devices QR scan (phone). Open `GET /api/inbox/status` — when `whatsapp.state` is `notAuthorized`, `whatsapp.qr.base64` is a PNG to scan.
+WhatsApp still needs **one** link step on a phone:
+
+1. **Recommended:** WhatsApp → Linked devices → Link with phone number → enter your number on the landing page → type the code into WhatsApp
+2. **Or** scan the **live** QR on the landing page (refreshes every few seconds — screenshots / PR images will not work)
+
+Open the app and use the **Agent channels** panel, or `GET /api/whatsapp/link` for a fresh QR.
 
 WeChat personal accounts have no public send API. WeCom requires a verified Chinese company corp account (cannot be created from this cloud environment).
 

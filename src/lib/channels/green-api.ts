@@ -29,10 +29,22 @@ export async function greenApiGetState(): Promise<{
     const res = await fetch(instanceUrl(cfg, "getStateInstance"), {
       cache: "no-store",
     });
-    const data = (await res.json()) as {
-      stateInstance?: string;
-      message?: string;
-    };
+    const raw = await res.text();
+    if (!raw.trim()) {
+      return {
+        configured: true,
+        error: `Empty state response (HTTP ${res.status})`,
+      };
+    }
+    let data: { stateInstance?: string; message?: string };
+    try {
+      data = JSON.parse(raw) as { stateInstance?: string; message?: string };
+    } catch {
+      return {
+        configured: true,
+        error: `Bad state JSON (HTTP ${res.status})`,
+      };
+    }
     if (!res.ok) {
       return {
         configured: true,
@@ -66,11 +78,90 @@ export async function greenApiGetQr(): Promise<{
     if (!res.ok) {
       return { ok: false, error: data.message || `HTTP ${res.status}` };
     }
+    if (data.type === "error" || data.type === "timeout") {
+      return {
+        ok: false,
+        type: data.type,
+        message: data.message,
+        error: data.message || data.type,
+      };
+    }
+    if (data.type === "alreadyLogged") {
+      return { ok: true, type: data.type, message: data.message };
+    }
     return { ok: true, type: data.type, message: data.message };
   } catch (e) {
     return {
       ok: false,
       error: e instanceof Error ? e.message : "QR fetch failed",
+    };
+  }
+}
+
+export async function greenApiReboot(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const cfg = getGreenApiConfig();
+  if (!cfg) return { ok: false, error: "Green-API not configured" };
+  try {
+    const res = await fetch(instanceUrl(cfg, "reboot"), { cache: "no-store" });
+    const data = (await res.json()) as {
+      isReboot?: boolean;
+      message?: string;
+    };
+    if (!res.ok || !data.isReboot) {
+      return { ok: false, error: data.message || `HTTP ${res.status}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "reboot failed",
+    };
+  }
+}
+
+/**
+ * Alternative to QR: WhatsApp → Linked devices → Link with phone number instead.
+ * Returns a short code the user types into WhatsApp (valid ~2.5 min).
+ */
+export async function greenApiGetAuthorizationCode(
+  phoneDigits: string,
+): Promise<{ ok: boolean; code?: string; error?: string }> {
+  const cfg = getGreenApiConfig();
+  if (!cfg) return { ok: false, error: "Green-API not configured" };
+  const phoneNumber = Number(phoneDigits.replace(/[^\d]/g, ""));
+  if (!Number.isFinite(phoneNumber) || String(phoneNumber).length < 8) {
+    return { ok: false, error: "Enter a full international phone number" };
+  }
+  try {
+    const res = await fetch(instanceUrl(cfg, "getAuthorizationCode"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phoneNumber }),
+    });
+    const data = (await res.json()) as {
+      status?: boolean;
+      code?: string;
+      message?: string;
+    };
+    if (!res.ok) {
+      return { ok: false, error: data.message || `HTTP ${res.status}` };
+    }
+    if (!data.status || !data.code) {
+      return {
+        ok: false,
+        error:
+          data.message ||
+          "Could not get link code — reboot the instance and try again",
+      };
+    }
+    return { ok: true, code: data.code };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "auth code failed",
     };
   }
 }
