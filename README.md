@@ -1,67 +1,74 @@
-# Agentic AI Drone Swarm Simulation (LLM-Driven)
+# China Access
 
-A prototype 3D search-and-rescue swarm where each drone is controlled by an LLM agent that uses tools to move, scan, and communicate.
+Hard-goods factory sourcing with generative deal rooms, live China marketplace search, multi-channel supplier outreach, and reply retranscription.
 
-## Features
-- LLM-driven agent loop (tool-calling)
-- 3D grid environment (numpy)
-- Real-time 3D viz (matplotlib animation)
-- Swarm manager and simple message bus
-- Mock mode (no API) or OpenAI `gpt-4o`
+## Product rules
 
-## Install
-```
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+- Hard goods only · no sampling · client never chats with the factory
+- Agent sources + talks to suppliers; deal room shows retranscription
 
-## Run (Mock LLM)
-```
-export LLM_PROVIDER=mock
-python main.py
-```
+## Live loop
 
-## Run (OpenAI)
-```
-export LLM_PROVIDER=openai
-export OPENAI_API_KEY=your_key
-python main.py
+1. **Source** — Made-in-China + AliExpress (Alibaba often CAPTCHA-blocked)
+2. **Contact** — Made-in-China inquiry (live) + WhatsApp (Green-API self-provisioned, Twilio optional) + WeChat/WeCom when available
+3. **Replies** — paste into Supplier thread, poll mail.tm / IMAP / Green-API, or email/WhatsApp webhooks → parse FOB/MOQ/lead time → refresh landed quote
+
+## Self-setup (agent does this)
+
+```bash
+npm run inbox:setup      # provisions mail.tm inbox → .env.local
+npm run whatsapp:setup   # provisions free Green-API WA instance → .env.local
+npm run dev              # both run automatically before next dev
 ```
 
-## Configuration
-- File: `config.json` (override path with `SWARM_CONFIG`)
-- Example keys:
-  - `swarm.num_drones`: number of agents
-  - `environment.size_x|size_y|size_z|num_targets|rng_seed`
-  - `visualization.frames|interval_ms|max_scanned_points`
-  - `agent.memory_limit`
-  - `llm.provider|model|temperature`
+WhatsApp still needs **one** link step on a phone:
 
-```json
-{
-  "swarm": {"num_drones": 8},
-  "environment": {"size_x": 30, "size_y": 30, "size_z": 6, "num_targets": 10, "rng_seed": 7},
-  "visualization": {"frames": 600, "interval_ms": 300, "max_scanned_points": 4000},
-  "agent": {"memory_limit": 120},
-  "llm": {"provider": "mock", "model": "gpt-4o-mini", "temperature": 0.2}
-}
+1. **Recommended:** WhatsApp → Linked devices → Link with phone number → enter your number on the landing page → type the code into WhatsApp
+2. **Or** scan the **live** QR on the landing page (refreshes every few seconds — screenshots / PR images will not work)
+
+Open the app and use the **Agent channels** panel, or `GET /api/whatsapp/link` for a fresh QR.
+
+WeChat personal accounts have no public send API. WeCom requires a verified Chinese company corp account (cannot be created from this cloud environment).
+
+## Optional overrides
+
+```bash
+# Agent identity (MIC inquiry “from”) — defaults come from mail.tm setup
+export CHINA_ACCESS_AGENT_EMAIL=you@example.com
+export CHINA_ACCESS_AGENT_NAME="China Access Agent"
+export CHINA_ACCESS_AGENT_COMPANY="China Access"
+export CHINA_ACCESS_AGENT_MOBILE=5550100123
+
+# IMAP fallback (if not using mail.tm)
+export CHINA_ACCESS_IMAP_HOST=imap.gmail.com
+export CHINA_ACCESS_IMAP_USER=you@example.com
+export CHINA_ACCESS_IMAP_PASS=app-password
+
+# Twilio WhatsApp (optional fallback)
+export TWILIO_ACCOUNT_SID=...
+export TWILIO_AUTH_TOKEN=...
+export TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+
+# WeChat Work (WeCom) — needs China entity
+export WECOM_CORP_ID=...
+export WECOM_SECRET=...
+export WECOM_AGENT_ID=...
 ```
 
-To use a different config file:
-```
-export SWARM_CONFIG=/path/to/your_config.json
-python main.py
+## Run
+
+```bash
+npm install
+npx playwright install chromium
+npm run dev
 ```
 
-## Files
-- `agents/drone_agent.py`: LLM agent logic
-- `core/environment.py`: 3D world + scan
-- `core/swarm.py`: swarm orchestration
-- `tools/movement.py`: move/scan tool wrappers
-- `main.py`: viz + stepping loop
+## API
 
-## Notes
-- Assumes a 20x20x5 grid by default
-- Simulation pauses between agent decisions
-- Easily extend with memory/planning modules 
+- `POST /api/inquiries` — create + live source
+- `POST /api/deals/:id/contact` — MIC + WhatsApp/WeChat outreach
+- `POST /api/deals/:id/replies` — `{ text, channel? }` ingest supplier reply
+- `POST /api/deals/:id/poll-replies` — mail.tm / IMAP / Green-API poll + ingest
+- `GET /api/inbox/status` — inbox + WhatsApp auth/QR status
+- `POST /api/webhooks/email` — inbound email JSON
+- `POST /api/webhooks/whatsapp` — Twilio or Green-API inbound
